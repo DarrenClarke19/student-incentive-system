@@ -63,7 +63,7 @@ user_cli = AppGroup('user', help='User object commands')
 @user_cli.command("create", help="Creates a user")
 @click.argument("username")
 @click.argument("password")
-@click.argument("role", type=click.Choice(['student', 'staff', 'admin']))
+@click.argument("role", type=click.Choice(['student', 'staff']))
 def create_user_command(username, password, role):
     result = create_user(username, password, role)
     print(result["message"])
