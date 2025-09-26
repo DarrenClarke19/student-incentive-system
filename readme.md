@@ -120,6 +120,48 @@ $ flask db upgrade
 $ flask db --help
 ```
 
+# CLI Commands
+
+---
+
+## 1. Authentication Commands
+
+| Command | Description |
+|--------|-------------|
+| `flask auth login <username>` | Log in as an existing user and store session information. |
+| `flask auth current-user` | Display the currently logged-in user’s information (username + role). |
+| `flask auth logout` | Log out and clear the current session. |
+
+---
+
+## 2. User management Commands
+
+| Command | Description |
+|--------|-------------|
+| `flask user create <username> <password> <role>` | Create a new user. Roles can be `student`, `staff`, or `admin`. |
+| `flask user list` | Show all users along with their profile info (ID, username, role, total hours if student). |
+
+---
+
+## 3. Student Service Commands
+
+| Command | Description |
+|--------|-------------|
+| `flask service submit-hours <hours> --description "Helped at library"` | Submit a request for volunteer hours. Staff must later approve it. |
+| `flask service my-requests` | View all of your submitted hour requests with their status (pending, approved, rejected). |
+| `flask service my-logs` | View your confirmed (approved) service logs and total hours. |
+| `flask service leaderboard --limit 5` | View the top students ranked by total confirmed hours (limit can be any number). |
+| `flask service accolades <student_username>` | View accolades (10h, 25h, 50h milestones) earned by a student. |
+
+---
+
+## 4. Staff Review Commands
+
+| Command | Description |
+|--------|-------------|
+| `flask service pending-students` | List all students with pending hour requests and their total pending hours. |
+| `flask service review-hours <username>` | Enter interactive review mode for a specific student’s requests. You can approve or reject each request individually. |
+
 # Testing
 
 ## Unit & Integration
