@@ -10,7 +10,6 @@ class ServiceLog(db.Model):
     hours = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text)
     logged_at = db.Column(db.DateTime, default=datetime.utcnow)
-    confirmed = db.Column(db.Boolean, default=False)
     
     student = db.relationship("Student", backref=db.backref("service_logs", lazy="select"))
     staff = db.relationship("User", backref=db.backref("logged_service", lazy="select"))

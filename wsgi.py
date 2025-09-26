@@ -23,52 +23,70 @@ def init():
     db.drop_all()
     db.create_all()   
         
-    staff_users = [
-        {"username": "staff1", "password": "staffpass", "role": UserRoleEnum.STAFF},
-        {"username": "staff2", "password": "staffpass", "role": UserRoleEnum.STAFF},
-    ] 
-    for staff in staff_users:
-        existing = User.query.filter_by(username=staff["username"]).first()
-        if not existing:
-            staff = User(
-                username=staff["username"],
-                password=staff["password"],
-                role=staff["role"]
-            )
-            db.session.add(staff)
-            db.session.flush()
-                
-            staff_profile = Staff(
-                user_id=staff.id,
-                staff_id=f"S{staff.id:03d}"
-            )
-            db.session.add(staff_profile)
-        
-    for i in range(1, 6):
-        student_data = {
-            "username": f"student{i}",
-            "password": "studentpass",
-            "role": UserRoleEnum.STUDENT
-        }
-            
-        existing = User.query.filter_by(username=student_data["username"]).first()
-        if not existing:
-            student = User(
-                username=student_data["username"],
-                password=student_data["password"],
-                role=student_data["role"]
-            )
-            db.session.add(student)
-            db.session.flush()
-                
-            profile = Student(
-                user_id=student.id,
-                student_id=f"S{i:03d}",
-                total_hours=i * 2.0
-            )
-            db.session.add(profile)
-        
+    staff_members = []
+    staff_data = [
+        {"username": "staff1", "password": "staffpass"},
+        {"username": "staff2", "password": "staffpass"},
+        {"username": "staff3", "password": "staffpass"}
+    ]
+    for s in staff_data:
+        staff_user = User(username=s["username"], password=s["password"], role=UserRoleEnum.STAFF)
+        db.session.add(staff_user)
+        db.session.flush()
+        staff_profile = Staff(user_id=staff_user.id)
+        db.session.add(staff_profile)
+        staff_members.append(staff_profile)
     db.session.commit()
+
+    students = []
+    for i in range(1, 8):
+        student_user = User(username=f"student{i}", password="studentpass", role=UserRoleEnum.STUDENT)
+        db.session.add(student_user)
+        db.session.flush()
+        student_profile = Student(user_id=student_user.id, total_hours=0.0)
+        db.session.add(student_profile)
+        students.append(student_profile)
+    db.session.commit()
+
+    requests = [
+        ConfirmationRequest(student_id=students[0].id, staff_id=staff_members[0].id, hours=5.0, description="Community Outreach", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[1].id, staff_id=staff_members[0].id, hours=3.0, description="Food Drive", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[1].id, staff_id=staff_members[1].id, hours=8.0, description="Football", status=RequestStatus.REJECTED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[2].id, staff_id=staff_members[1].id, hours=10.0, description="Library Book Sorting", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[3].id, staff_id=staff_members[2].id, hours=15.0, description="Park Cleanup", status=RequestStatus.PENDING),
+        ConfirmationRequest(student_id=students[4].id, staff_id=staff_members[2].id, hours=7.0, description="Senior Center", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[5].id, staff_id=staff_members[0].id, hours=12.0, description="Animal Shelter", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
+        ConfirmationRequest(student_id=students[6].id, staff_id=staff_members[1].id, hours=2.0, description="Help Desk", status=RequestStatus.PENDING),
+    ]
+    db.session.add_all(requests)
+    db.session.commit()
+
+    for req in requests:
+        if req.status == RequestStatus.APPROVED:
+            service_log = ServiceLog(
+                student_id=req.student_id,
+                staff_id=req.staff_id,
+                hours=req.hours,
+                description=req.description
+            )
+            db.session.add(service_log)
+    db.session.commit()
+
+    for student in students:
+        approved_hours = db.session.query(db.func.sum(ServiceLog.hours)).filter(ServiceLog.student_id == student.id).scalar() or 0.0
+        student.total_hours = approved_hours
+        db.session.add(student)
+    db.session.commit()
+
+    for student in students:
+        if student.total_hours >= 10:
+            db.session.add(Accolade(student_id=student.id, accolade_type="10"))
+        if student.total_hours >= 25:
+            db.session.add(Accolade(student_id=student.id, accolade_type="25"))
+        if student.total_hours >= 50:
+            db.session.add(Accolade(student_id=student.id, accolade_type="50"))
+    db.session.commit()
+
     print("database initialized!")
 
 '''
@@ -156,16 +174,13 @@ def create_user_command(username, password, role):
     if role == 'student':
         db.session.flush()
         student = Student(
-            user_id=user.id,
-            student_id=f"S{user.id:03d}"
+            user_id=user.id
         )
         db.session.add(student)
     elif role == 'staff':
         db.session.flush()
         staff = Staff(
-            user_id=user.id,
-            staff_id=f"ST{user.id:03d}",
-            department="General"
+            user_id=user.id
         )
         db.session.add(staff)
     
@@ -181,9 +196,9 @@ def list_user_command():
     for user in users:
         profile_info = ""
         if user.student:
-            profile_info = f"Student ID: {user.student.student_id} | Hours: {user.student.total_hours}"
+            profile_info = f"Student ID: {user.student.id} | Hours: {user.student.total_hours}"
         elif user.staff:
-            profile_info = f"Staff ID: {user.staff.staff_id}"
+            profile_info = f"Staff ID: {user.staff.id}"
         else:
             profile_info = "No profile"
         
@@ -372,7 +387,7 @@ def review_requests_command(student_username):
             
             if decision == 'y':
                 # Approve request
-                selected_request.staff_id = staff_user.id
+                selected_request.staff_id = staff_user.staff.id
                 selected_request.status = RequestStatus.APPROVED
                 selected_request.responded_at = datetime.utcnow()
                 
@@ -399,7 +414,7 @@ def review_requests_command(student_username):
                 
             elif decision == 'n':
                 # Reject request
-                selected_request.staff_id = staff_user.id
+                selected_request.staff_id = staff_user.staff.id
                 selected_request.status = RequestStatus.REJECTED
                 selected_request.responded_at = datetime.utcnow()
                 
@@ -411,7 +426,7 @@ def review_requests_command(student_username):
                 # Reject with reason
                 reason = input("Enter rejection reason: ").strip()
                 
-                selected_request.staff_id = staff_user.id
+                selected_request.staff_id = staff_user.staff.id
                 selected_request.status = RequestStatus.REJECTED
                 selected_request.responded_at = datetime.utcnow()
                 

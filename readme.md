@@ -138,7 +138,7 @@ $ flask db --help
 
 | Command | Description |
 |--------|-------------|
-| `flask user create <username> <password> <role>` | Create a new user. Roles can be `student`, `staff`, or `admin`. |
+| `flask user create <username> <password> <role>` | Create a new user. Roles can be `student` or `staff`. |
 | `flask user list` | Show all users along with their profile info (ID, username, role, total hours if student). |
 
 ---

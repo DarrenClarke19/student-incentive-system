@@ -5,7 +5,6 @@ from enum import Enum
 class UserRoleEnum(str, Enum):
     STUDENT = "student"
     STAFF = "staff"
-    ADMIN = "admin"
 
 class User(db.Model):
     __tablename__ = "users"
