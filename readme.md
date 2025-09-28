@@ -152,7 +152,7 @@ $ flask db --help
 | `flask service my-requests` | View all of your submitted hour requests with their status (pending, approved, rejected). |
 | `flask service my-logs` | View your confirmed (approved) service logs and total hours. |
 | `flask service leaderboard --limit 5` | View the top students ranked by total confirmed hours (limit can be any number). |
-| `flask service accolades <student_username>` | View accolades (10h, 25h, 50h milestones) earned by a student. |
+| `flask service view-accolades` | View accolades (10h, 25h, 50h milestones) earned by the currently logged in student. |
 
 ---
 
