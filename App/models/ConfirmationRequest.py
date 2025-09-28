@@ -21,6 +21,7 @@ class ConfirmationRequest(db.Model):
 
     student = db.relationship("Student", backref="confirmation_requests")
     staff = db.relationship("Staff", backref="handled_requests")
+    reason = db.Column(db.String(50), nullable=True)
 
     def __repr__(self):
         return f'<ConfirmationRequest {self.id}: {self.hours}h - {self.status}>'

@@ -1,16 +1,23 @@
 import click, pytest, sys
 from flask.cli import with_appcontext, AppGroup
-from datetime import datetime
-from functools import wraps
 from tabulate import tabulate
 from App.database import db, get_migrate
 from App.main import create_app
-from App.controllers import ( create_user, get_all_users_json, get_all_users, initialize )
-from App.models import User, UserRoleEnum, Student, Staff, ServiceLog, ConfirmationRequest, RequestStatus, Accolade
-
-import json
-import os
-
+from App.models import User
+from App.controllers import (
+    # Service functions
+    submit_hours, get_student_requests, get_pending_requests_for_student, 
+    approve_request, reject_request, get_student_service_logs, get_pending_students,
+    interactive_request_review,
+    # Accolade functions
+    check_and_award_accolades, get_student_accolades, get_leaderboard,
+    # Session functions
+    login, logout, get_current_user_info, require_login,
+    # User functions
+    create_user, list_users_formatted,
+    # Initialize functions
+    initialize
+)
 
 # This commands file allow you to create convenient CLI commands for testing controllers
 
@@ -20,131 +27,30 @@ migrate = get_migrate(app)
 # This command creates and initializes the database
 @app.cli.command("init", help="Creates and initializes the database")
 def init():
-    db.drop_all()
-    db.create_all()   
-        
-    staff_members = []
-    staff_data = [
-        {"username": "staff1", "password": "staffpass"},
-        {"username": "staff2", "password": "staffpass"},
-        {"username": "staff3", "password": "staffpass"}
-    ]
-    for s in staff_data:
-        staff_user = User(username=s["username"], password=s["password"], role=UserRoleEnum.STAFF)
-        db.session.add(staff_user)
-        db.session.flush()
-        staff_profile = Staff(user_id=staff_user.id)
-        db.session.add(staff_profile)
-        staff_members.append(staff_profile)
-    db.session.commit()
-
-    students = []
-    for i in range(1, 8):
-        student_user = User(username=f"student{i}", password="studentpass", role=UserRoleEnum.STUDENT)
-        db.session.add(student_user)
-        db.session.flush()
-        student_profile = Student(user_id=student_user.id, total_hours=0.0)
-        db.session.add(student_profile)
-        students.append(student_profile)
-    db.session.commit()
-
-    requests = [
-        ConfirmationRequest(student_id=students[0].id, staff_id=staff_members[0].id, hours=5.0, description="Community Outreach", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[1].id, staff_id=staff_members[0].id, hours=3.0, description="Food Drive", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[1].id, staff_id=staff_members[1].id, hours=8.0, description="Football", status=RequestStatus.REJECTED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[2].id, staff_id=staff_members[1].id, hours=10.0, description="Library Book Sorting", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[3].id, staff_id=staff_members[2].id, hours=15.0, description="Park Cleanup", status=RequestStatus.PENDING),
-        ConfirmationRequest(student_id=students[4].id, staff_id=staff_members[2].id, hours=7.0, description="Senior Center", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[5].id, staff_id=staff_members[0].id, hours=12.0, description="Animal Shelter", status=RequestStatus.APPROVED, responded_at=datetime.utcnow()),
-        ConfirmationRequest(student_id=students[6].id, staff_id=staff_members[1].id, hours=2.0, description="Help Desk", status=RequestStatus.PENDING),
-    ]
-    db.session.add_all(requests)
-    db.session.commit()
-
-    for req in requests:
-        if req.status == RequestStatus.APPROVED:
-            service_log = ServiceLog(
-                student_id=req.student_id,
-                staff_id=req.staff_id,
-                hours=req.hours,
-                description=req.description
-            )
-            db.session.add(service_log)
-    db.session.commit()
-
-    for student in students:
-        approved_hours = db.session.query(db.func.sum(ServiceLog.hours)).filter(ServiceLog.student_id == student.id).scalar() or 0.0
-        student.total_hours = approved_hours
-        db.session.add(student)
-    db.session.commit()
-
-    for student in students:
-        if student.total_hours >= 10:
-            db.session.add(Accolade(student_id=student.id, accolade_type="10"))
-        if student.total_hours >= 25:
-            db.session.add(Accolade(student_id=student.id, accolade_type="25"))
-        if student.total_hours >= 50:
-            db.session.add(Accolade(student_id=student.id, accolade_type="50"))
-    db.session.commit()
-
-    print("database initialized!")
+    initialize()
 
 '''
 Authentication Commands
 '''
 auth_cli = AppGroup('auth', help='Authentication commands')
 
-# Session management using a file
-
-SESSION_FILE = ".current_user.json"
-
-def set_current_user(user):
-    session_data = {
-        "username": user.username,
-        "role": user.role.value,
-        "user_id": user.id,
-        "login_time": datetime.utcnow().isoformat()
-    }
-    with open(SESSION_FILE, "w") as f:
-        json.dump(session_data, f)
-
-def get_current_user():
-    if not os.path.exists(SESSION_FILE):
-        return None
-    try:
-        with open(SESSION_FILE, "r") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return None
-
-def clear_current_user():
-    if os.path.exists(SESSION_FILE):
-        os.remove(SESSION_FILE)
-
 # This command logs in a user and saves current user to a session file for RBAC
 @auth_cli.command("login", help="Login as a user")
 @click.argument("username")
 @click.option("--password", prompt=True, hide_input=True)
 def login_command(username, password):
-    user = User.query.filter_by(username=username).first()
-    if user and user.check_password(password):
-        set_current_user(user)
-        print(f"Logged in as {username} ({user.role.value})")
-    else:
-        print("Invalid username or password")
+    result = login(username, password)
+    print(result["message"])
 
 @auth_cli.command("logout", help="Logout current user")
 def logout_command():
-    clear_current_user()
-    print("Logged out")
+    result = logout()
+    print(result["message"])
 
 @auth_cli.command("current-user", help="Show current user")
 def current_user_command():
-    user = get_current_user()
-    if user:
-        print(f"Logged in as: {user['username']} ({user['role']})")
-    else:
-        print("Not logged in")
+    result = get_current_user_info()
+    print(result["message"])
 
 app.cli.add_command(auth_cli)
 
@@ -157,62 +63,27 @@ user_cli = AppGroup('user', help='User object commands')
 @user_cli.command("create", help="Creates a user")
 @click.argument("username")
 @click.argument("password")
-@click.argument("role", type=click.Choice(['student', 'staff', 'admin']))
+@click.argument("role", type=click.Choice(['student', 'staff']))
 def create_user_command(username, password, role):
-    existing = User.query.filter_by(username=username).first()
-    if existing:
-        print(f"User {username} already exists")
-        return
-    
-    user = User(
-        username=username,
-        password=password,
-        role=UserRoleEnum(role)
-    )
-    db.session.add(user)
-    
-    if role == 'student':
-        db.session.flush()
-        student = Student(
-            user_id=user.id
-        )
-        db.session.add(student)
-    elif role == 'staff':
-        db.session.flush()
-        staff = Staff(
-            user_id=user.id
-        )
-        db.session.add(staff)
-    
-    db.session.commit()
-    print(f'User {username} created with role {role}!')
+    result = create_user(username, password, role)
+    print(result["message"])
 
 @user_cli.command("list", help="Lists users in the database")
 def list_user_command():
-    users = User.query.all()
-    
-    # Prepare table data
-    table_data = []
-    for user in users:
-        profile_info = ""
-        if user.student:
-            profile_info = f"Student ID: {user.student.id} | Hours: {user.student.total_hours}"
-        elif user.staff:
-            profile_info = f"Staff ID: {user.staff.id}"
-        else:
-            profile_info = "No profile"
-        
-        table_data.append([
-            user.username,
-            user.role.value.title(),
-            profile_info
-        ])
-    
-    headers = ["Username", "Role", "Profile Info"]
+    result = list_users_formatted()
     print("\n" + "="*80)
-    print("ALL USERS")
+    print(result["message"])
     print("="*80)
-    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    
+    if result["users"]:
+        table_data = []
+        for user in result["users"]:
+            table_data.append([user["username"], user["role"], user["profile_info"]])
+        
+        headers = ["Username", "Role", "Profile Info"]
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    else:
+        print("No users found")
 
 app.cli.add_command(user_cli)
 
@@ -221,348 +92,144 @@ Service Commands - Core Assignment Requirements
 '''
 service_cli = AppGroup('service', help='Service logging and confirmation commands')
 
-def require_login():
-    user = get_current_user()
-    if not user:
-        print("You must login first. Use: flask auth login <username>")
-        return None
-    return user
-
-def require_role(allowed_roles):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            user = require_login()
-            if not user:
-                return
-            if user["role"] not in allowed_roles:
-                print(f"Insufficient permissions. Required role: {', '.join(allowed_roles)}")
-                return
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-def check_and_award_accolades(student):
-    thresholds = [10, 25, 50]
-    
-    for threshold in thresholds:
-        existing_accolade = Accolade.query.filter_by(
-            student_id=student.id,
-            accolade_type=str(threshold)
-        ).first()
-        
-        if student.total_hours >= threshold and not existing_accolade:
-            accolade = Accolade(
-                student_id=student.id,
-                accolade_type=str(threshold)
-            )
-            db.session.add(accolade)
-    
-    db.session.commit()
-
+#This command allows a student to submit hours for approval by a staff member
 @service_cli.command("submit-hours", help="Submit hours for approval (students only)")
 @click.argument("hours", type=float)
 @click.option("--description", default="", help="Description of the service performed")
 def submit_hours_command(hours, description):
-    user = require_login()
-    if not user or user["role"] != "student":
-        print("Only students can submit hours")
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
         return
-    
-    if hours <= 0:
-        print("Hours must be greater than 0")
-        return
-    if hours > 24:
-        print("Hours cannot exceed 24 per session")
-        return
-    
-    # Find student
-    student_user = User.query.filter_by(username=user["username"]).first()
-    if not student_user or not student_user.student:
-        print("Student profile not found")
-        return
-    
-    # Create confirmation request (student submits hours for approval)
-    confirmation_request = ConfirmationRequest(
-        student_id=student_user.student.id,
-        hours=hours,
-        description=description,
-        status=RequestStatus.PENDING
-    )
-    
-    db.session.add(confirmation_request)
-    db.session.commit()
-    
-    print(f"Submitted {hours} hours for approval (Request ID: {confirmation_request.id})")
-    print("Staff will review and approve your request.")
 
+    result = submit_hours(hours, description, login_result["user"])
+    print(result["message"])
+
+# This command allows a student to view their submitted hour requests
 @service_cli.command("my-requests", help="View your submitted hour requests (students only)")
 def my_requests_command():
-    user = require_login()
-    if not user or user["role"] != "student":
-        print("Only students can view their requests")
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
         return
     
-    # Find student
-    student_user = User.query.filter_by(username=user["username"]).first()
-    if not student_user or not student_user.student:
-        print("Student profile not found")
-        return
+    result = get_student_requests(login_result["user"])
+    print(result["message"])
     
-    requests = ConfirmationRequest.query.filter_by(student_id=student_user.student.id).order_by(ConfirmationRequest.requested_at.desc()).all()
-    
-    print(f"\nYour Hour Requests:")
-    print("-" * 60)
-    for req in requests:
-        print(f"ID: {req.id} | {req.hours}h | {req.status.value.title()} | {req.description}")
-        if req.requested_at:
-            print(f"    Submitted: {req.requested_at.strftime('%Y-%m-%d %H:%M')}")
-    if not requests:
-        print("No requests submitted yet. Use 'flask service submit-hours <hours>' to submit your first request.")
+    if result["requests"]:
+        print("-" * 60)
+        for req in result["requests"]:
+            print(f"ID: {req['id']} | {req['hours']}h | {req['status']} | {req['description']}")
+            print(f"    Submitted: {req['submitted_at']}")
+            if req['status'] == 'Rejected' and req.get('reason'):
+                print(f"    Reason: {req['reason']}")
+    else:
+        print(result["message"])
 
+# This command allows a staff member to review and approve/reject pending requests for a specific student
 @service_cli.command("review-hours", help="Interactive review of pending requests for a specific student (staff only)")
 @click.argument("student_username")
 def review_requests_command(student_username):
-    user = require_login()
-    if not user or user["role"] != "staff":
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
+        return
+    
+    if login_result["user"]["role"] != "staff":
         print("Only staff can review requests")
         return
     
-    # Find staff user
-    staff_user = User.query.filter_by(username=user["username"]).first()
+    staff_user = User.query.filter_by(username=login_result["user"]["username"]).first()
     
-    # Find student
-    student_user = User.query.filter_by(username=student_username).first()
-    if not student_user or not student_user.student:
-        print(f"Student '{student_username}' not found")
-        return
-    
-    while True:
-        # Get pending requests for this specific student
-        requests = ConfirmationRequest.query.filter_by(
-            student_id=student_user.student.id,
-            status=RequestStatus.PENDING
-        ).all()
-        
-        if not requests:
-            print(f"\nNo pending requests for {student_username}.")
-            break
-        
-        # Display student info and requests
-        print(f"\nReviewing requests for: {student_username}")
-        print(f"Current total hours: {student_user.student.total_hours}")
-        print(f"Pending requests ({len(requests)} total):")
-        print("-" * 80)
-        for i, req in enumerate(requests, 1):
-            print(f"[{i}] Hours: {req.hours} | {req.description}")
-            print(f"     Submitted: {req.requested_at.strftime('%Y-%m-%d %H:%M')}")
-            print()
-        
-        # Get user selection
-        try:
-            choice = input(f"Select request (1-{len(requests)}) or 'q' to quit: ").strip()
-            
-            if choice.lower() == 'q':
-                print("Exiting review mode.")
-                break
-            
-            choice_num = int(choice)
-            if choice_num < 1 or choice_num > len(requests):
-                print("Invalid selection. Please try again.")
-                continue
-            
-            # Get the selected request
-            selected_request = requests[choice_num - 1]
-            student = User.query.get(selected_request.student.user_id)
-            
-            # Show request details
-            print(f"\nReviewing Request #{selected_request.id}:")
-            print(f"Student: {student.username}")
-            print(f"Hours: {selected_request.hours}")
-            print(f"Description: {selected_request.description}")
-            print(f"Submitted: {selected_request.requested_at.strftime('%Y-%m-%d %H:%M')}")
-            
-            # Get decision
-            decision = input("\nApprove this request? (y/n/r for reason): ").strip().lower()
-            
-            if decision == 'y':
-                # Approve request
-                selected_request.staff_id = staff_user.staff.id
-                selected_request.status = RequestStatus.APPROVED
-                selected_request.responded_at = datetime.utcnow()
-                
-                # Create confirmed ServiceLog
-                service_log = ServiceLog(
-                    student_id=selected_request.student_id,
-                    staff_id=staff_user.id,
-                    hours=selected_request.hours,
-                    description=selected_request.description,
-                    confirmed=True
-                )
-                db.session.add(service_log)
-                
-                # Update student total hours
-                student_profile = Student.query.get(selected_request.student_id)
-                student_profile.total_hours += selected_request.hours
-                
-                # Check for accolades
-                check_and_award_accolades(student_profile)
-                
-                db.session.commit()
-                
-                print(f"Approved! {student.username} now has {student_profile.total_hours} total hours.")
-                
-            elif decision == 'n':
-                # Reject request
-                selected_request.staff_id = staff_user.staff.id
-                selected_request.status = RequestStatus.REJECTED
-                selected_request.responded_at = datetime.utcnow()
-                
-                db.session.commit()
-                
-                print(f"Rejected request from {student.username}")
-                
-            elif decision == 'r':
-                # Reject with reason
-                reason = input("Enter rejection reason: ").strip()
-                
-                selected_request.staff_id = staff_user.staff.id
-                selected_request.status = RequestStatus.REJECTED
-                selected_request.responded_at = datetime.utcnow()
-                
-                db.session.commit()
-                
-                print(f"Rejected request from {student.username}")
-                print(f"Reason: {reason}")
-                
-            else:
-                print("Invalid choice. Skipping this request.")
-                continue
-            
-            # Ask if user wants to continue
-            continue_review = input("\nContinue reviewing? (y/n): ").strip().lower()
-            if continue_review != 'y':
-                break
-                
-        except ValueError:
-            print("Invalid input. Please enter a number or 'q'.")
-            continue
-        except KeyboardInterrupt:
-            print("\nExiting review mode.")
-            break
+    interactive_request_review(student_username, staff_user)
 
+# This command shows the leaderboard of students with the most service hours
 @service_cli.command("leaderboard", help="View student leaderboard")
 @click.option("--limit", default=10, help="Number of students to show")
 def leaderboard_command(limit):
-    students = Student.query.order_by(Student.total_hours.desc()).limit(limit).all()
-    
-    if not students:
-        print("No students found")
+    result = get_leaderboard(limit)
+    if not result["success"]:
+        print(result["message"])
         return
     
-    # Prepare table data
+    print("\n" + "="*80)
+    print(result["message"])
+    print("="*80)
+    
     table_data = []
-    for i, student in enumerate(students, 1):
-        # Get accolades for this student
-        accolades = Accolade.query.filter_by(student_id=student.id).all()
-        accolade_badges = " ".join([f"{acc.accolade_type}h" for acc in accolades])
-        
+    for student in result["leaderboard"]:
         table_data.append([
-            f"#{i}",
-            student.user.username,
-            f"{student.total_hours}h",
-            accolade_badges if accolade_badges else "No accolades"
+            f"#{student['rank']}",
+            student["username"],
+            f"{student['total_hours']}h",
+            student["accolades"]
         ])
     
     headers = ["Rank", "Student", "Total Hours", "Accolades"]
-    print("\n" + "="*80)
-    print(f"TOP {limit} STUDENTS LEADERBOARD")
-    print("="*80)
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
+# This command shows the accolades earned by a specific student
 @service_cli.command("accolades", help="View accolades for a student")
 @click.argument("student_username")
 def accolades_command(student_username):
-    student_user = User.query.filter_by(username=student_username).first()
-    if not student_user or not student_user.student:
-        print(f"Student {student_username} not found")
-        return
-    
-    accolades = Accolade.query.filter_by(student_id=student_user.student.id).all()
-    
-    print(f"\n Accolades for {student_username}:")
+    result = get_student_accolades(student_username)
+    print(f"\n{result['message']}")
     print("-" * 30)
-    if accolades:
-        for accolade in accolades:
-            print(f"• {accolade.accolade_type} hours - Awarded {accolade.awarded_at.strftime('%Y-%m-%d')}")
+    
+    if result["accolades"]:
+        for accolade in result["accolades"]:
+            print(f"• {accolade['type']} hours - Awarded {accolade['awarded_at']}")
     else:
         print("No accolades yet")
 
+# This command allows a student to view their confirmed service logs
 @service_cli.command("my-logs", help="View your confirmed service logs (students only)")
 def my_logs_command():
-    user = require_login()
-    if not user or user["role"] != "student":
-        print("Only students can view their service logs")
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
         return
     
-    student_user = User.query.filter_by(username=user["username"]).first()
-    if not student_user or not student_user.student:
-        print("Student profile not found")
-        return
+    result = get_student_service_logs(login_result["user"])
+    print(result["message"])
     
-    service_logs = ServiceLog.query.filter_by(student_id=student_user.student.id, confirmed=True).order_by(ServiceLog.logged_at.desc()).all()
-    
-    print(f"\nConfirmed Service Logs for {user['username']}:")
-    print("-" * 60)
-    for log in service_logs:
-        staff_user = User.query.get(log.staff_id)
-        print(f"ID: {log.id} | {log.hours}h | Approved by: {staff_user.username} | {log.description}")
-        print(f"    Logged: {log.logged_at.strftime('%Y-%m-%d %H:%M')}")
-    
-    if not service_logs:
+    if result["logs"]:
+        print("-" * 60)
+        for log in result["logs"]:
+            print(f"ID: {log['id']} | {log['hours']}h | Approved by: {log['approved_by']} | {log['description']}")
+            print(f"    Logged: {log['logged_at']}")
+    else:
         print("No confirmed service logs found. Submit hours for approval first!")
     
-    # Also show current total hours
-    print(f"\nTotal Confirmed Hours: {student_user.student.total_hours}")
+    print(f"\nTotal Confirmed Hours: {result['total_hours']}")
 
+# This command allows a staff member to view all students with pending hour requests
 @service_cli.command("pending-students", help="List students with pending hour requests (staff only)")
 def pending_students_command():
-    user = require_login()
-    if not user or user["role"] != "staff":
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
+        return
+    
+    if login_result["user"]["role"] != "staff":
         print("Only staff can view pending students")
         return
     
-    # Get all pending requests grouped by student
-    pending_requests = ConfirmationRequest.query.filter_by(status=RequestStatus.PENDING).all()
+    result = get_pending_students()
+    print(f"\n{result['message']}")
     
-    if not pending_requests:
-        print("\nNo pending requests from any students.")
-        return
-    
-    # Group by student
-    students_with_requests = {}
-    for req in pending_requests:
-        student_id = req.student_id
-        if student_id not in students_with_requests:
-            students_with_requests[student_id] = []
-        students_with_requests[student_id].append(req)
-    
-    print(f"\nStudents with Pending Requests ({len(students_with_requests)} students):")
-    print("-" * 70)
-    
-    for student_id, requests in students_with_requests.items():
-        student = Student.query.get(student_id)
-        student_user = User.query.get(student.user_id)
-        
-        total_pending_hours = sum(req.hours for req in requests)
-        print(f"{student_user.username}")
-        print(f"   Current hours: {student.total_hours}")
-        print(f"   Pending requests: {len(requests)} ({total_pending_hours} hours total)")
-        print(f"   Review command: flask service review-hours {student_user.username}")
-        print()
+    if result["students"]:
+        print("-" * 70)
+        for student in result["students"]:
+            print(f"{student['username']}")
+            print(f"   Current hours: {student['current_hours']}")
+            print(f"   Pending requests: {student['pending_requests']} ({student['total_pending_hours']} hours total)")
+            print(f"   Review command: flask service review-hours {student['username']}")
+            print()
+    else:
+        print("No pending requests from any students.")
     
     print("Use 'flask service review-hours <username>' to review a specific student's requests.")
-
 
 app.cli.add_command(service_cli)
 
@@ -581,6 +248,5 @@ def user_tests_command(type):
         sys.exit(pytest.main(["-k", "UserIntegrationTests"]))
     else:
         sys.exit(pytest.main(["-k", "App"]))
-    
 
 app.cli.add_command(test)
