@@ -121,6 +121,8 @@ def my_requests_command():
         for req in result["requests"]:
             print(f"ID: {req['id']} | {req['hours']}h | {req['status']} | {req['description']}")
             print(f"    Submitted: {req['submitted_at']}")
+            if req['status'] == 'Rejected' and req.get('reason'):
+                print(f"    Reason: {req['reason']}")
     else:
         print(result["message"])
 

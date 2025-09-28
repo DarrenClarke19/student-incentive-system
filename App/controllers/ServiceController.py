@@ -65,7 +65,8 @@ def get_student_requests(current_user):
             "hours": req.hours,
             "status": req.status.value.title(),
             "description": req.description,
-            "submitted_at": req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else "Unknown"
+            "submitted_at": req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else "Unknown",
+            "reason": req.reason
         })
     
     return {
@@ -147,7 +148,9 @@ def reject_request(request_id, staff_user, reason=None):
     request.staff_id = staff_user.staff.id
     request.status = RequestStatus.REJECTED
     request.responded_at = datetime.utcnow()
-    
+    if reason:
+        request.reason=reason
+
     db.session.commit()
     
     student_user = User.query.get(request.student.user_id)
