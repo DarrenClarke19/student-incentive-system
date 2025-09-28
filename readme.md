@@ -207,3 +207,11 @@ You can also generate a detailed html report in a directory named htmlcov with t
 ```bash
 $ coverage html
 ```
+
+# Demo 
+![Student-Incentive-System](https://github.com/user-attachments/assets/92e24066-f04d-4faf-89c6-9447be2e0233)
+
+![Student-Incentive-System-2](https://github.com/user-attachments/assets/4d67b581-ba06-4968-acbb-a4a83285adca)
+
+
+
