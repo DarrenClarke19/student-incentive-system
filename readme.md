@@ -129,7 +129,7 @@ $ flask db --help
 
 | Command | Description |
 |--------|-------------|
-| `flask auth login <username>` | Log in as an existing user and store session information. |
+| `flask auth login <username>` | Log in as an existing user and store session information. All existing student passwords are "studentpass". All existing staff passwords are "staffpass" |
 | `flask auth current-user` | Display the currently logged-in user’s information (username + role). |
 | `flask auth logout` | Log out and clear the current session. |
 
