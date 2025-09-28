@@ -16,7 +16,7 @@ def submit_hours(hours, description, current_user):
     if not current_user or current_user["role"] != "student":
         return {"success": False, "message": "Only students can submit hours"}
     
-    validation_result = validateHours(hours)
+    validation_result = validate_hours(hours)
     if not validation_result["success"]:
         return validation_result
     
