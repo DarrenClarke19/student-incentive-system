@@ -1,6 +1,6 @@
 from datetime import datetime
 from App.database import db
-from App.models import Student, Accolade
+from App.models import Student, Accolade, User
 
 def check_and_award_accolades(student):
     thresholds = [10, 25, 50]
@@ -20,13 +20,8 @@ def check_and_award_accolades(student):
     
     db.session.commit()
 
-def get_student_accolades(student_username):
-    from App.models import User
-    
+def get_student_accolades(student_username):    
     student_user = User.query.filter_by(username=student_username).first()
-    if not student_user or not student_user.student:
-        return {"success": False, "message": f"Student {student_username} not found", "accolades": []}
-    
     accolades = Accolade.query.filter_by(student_id=student_user.student.id).all()
     
     if not accolades:

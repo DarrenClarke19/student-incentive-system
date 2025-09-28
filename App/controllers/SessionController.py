@@ -31,7 +31,6 @@ def clear_current_user():
         os.remove(SESSION_FILE)
 
 def login(username, password):
-    """Login a user and save to session"""
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
         set_current_user(user)

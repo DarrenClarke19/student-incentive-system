@@ -1,3 +1,4 @@
+""" This is from the MVC tempplate. Not being used for CLI application. Refer to SessionController.py for authentication logic """
 from flask_jwt_extended import create_access_token, jwt_required, JWTManager, get_jwt_identity, verify_jwt_in_request
 
 from App.models import User

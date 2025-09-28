@@ -168,14 +168,22 @@ def leaderboard_command(limit):
     headers = ["Rank", "Student", "Total Hours", "Accolades"]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-# This command shows the accolades earned by a specific student
-@service_cli.command("accolades", help="View accolades for a student")
-@click.argument("student_username")
-def accolades_command(student_username):
-    result = get_student_accolades(student_username)
+# This command shows the accolades earned by the logged in student
+@service_cli.command("view-accolades", help="View your accolades (students only)")
+def view_accolades_command():
+    login_result = require_login()
+    if not login_result["success"]:
+        print(login_result["message"])
+        return
+    
+    if login_result["user"]["role"] != "student":
+        print("Only students can view their accolades")
+        return
+    
+    result = get_student_accolades(login_result["user"]["username"])
     print(f"\n{result['message']}")
     print("-" * 30)
-    
+
     if result["accolades"]:
         for accolade in result["accolades"]:
             print(f"• {accolade['type']} hours - Awarded {accolade['awarded_at']}")
