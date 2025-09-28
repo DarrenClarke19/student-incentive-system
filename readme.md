@@ -5,8 +5,8 @@
 
 ![Tests](https://github.com/uwidcit/flaskmvc/actions/workflows/dev.yml/badge.svg)
 
-# Flask MVC Template
-A template for flask applications structured in the Model View Controller pattern [Demo](https://dcit-flaskmvc.herokuapp.com/). [Postman Collection](https://documenter.getpostman.com/view/583570/2s83zcTnEJ)
+# Student Incentive System
+A Flask MVC CLI application that gamifies student volunteerism by allowing students to log service hours, have them approved by staff, and earn accolades (badges). The system includes a leaderboard to promote engagement.
 
 
 # Dependencies
@@ -84,7 +84,7 @@ app.cli.add_command(user_cli) # add the group to the cli
 Then execute the command invoking with flask cli with command name and the relevant parameters
 
 ```bash
-$ flask user create bob bobpass
+$ flask user create bob bobpass <role>
 ```
 
 
@@ -207,30 +207,3 @@ You can also generate a detailed html report in a directory named htmlcov with t
 ```bash
 $ coverage html
 ```
-
-# Troubleshooting
-
-## Views 404ing
-
-If your newly created views are returning 404 ensure that they are added to the list in main.py.
-
-```python
-from App.views import (
-    user_views,
-    index_views
-)
-
-# New views must be imported and added to this list
-views = [
-    user_views,
-    index_views
-]
-```
-
-## Cannot Update Workflow file
-
-If you are running into errors in gitpod when updateding your github actions file, ensure your [github permissions](https://gitpod.io/integrations) in gitpod has workflow enabled ![perms](./images/gitperms.png)
-
-## Database Issues
-
-If you are adding models you may need to migrate the database with the commands given in the previous database migration section. Alternateively you can delete you database file.
