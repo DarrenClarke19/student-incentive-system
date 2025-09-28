@@ -52,7 +52,7 @@ def logout():
     }
 
 def get_current_user_info():
-    user = getCurrentUser()
+    user = get_current_user()
     if user:
         return {
             "success": True,
